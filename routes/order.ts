@@ -11,6 +11,8 @@ import { type Request, type Response, type NextFunction } from 'express'
 import { challenges, products } from '../data/datacache'
 import * as challengeUtils from '../lib/challengeUtils'
 import { BasketItemModel } from '../models/basketitem'
+import { CardModel } from '../models/card'
+import { AddressModel } from '../models/address'
 import { DeliveryModel } from '../models/delivery'
 import { QuantityModel } from '../models/quantity'
 import { ProductModel } from '../models/product'
@@ -160,6 +162,22 @@ export function placeOrder () {
           challengeUtils.solveIf(challenges.negativeOrderChallenge, () => { return totalPrice < 0 })
 
           if (req.body.UserId) {
+            // [취약] paymentId, addressId 소유권 검증 없이 바로 결제 처리 — IDOR 취약점
+
+            // [보안] Card, Address 소유권 검증 후 불일치 시 403 반환
+            if (req.body.orderDetails?.paymentId && req.body.orderDetails.paymentId !== 'wallet') {
+              const card = await CardModel.findByPk(req.body.orderDetails.paymentId)
+              if (!card || card.UserId !== req.body.UserId) {
+                return res.status(403).json({ error: 'Access denied: invalid payment method' })
+              }
+            }
+            if (req.body.orderDetails?.addressId) {
+              const address = await AddressModel.findByPk(req.body.orderDetails.addressId)
+              if (!address || address.UserId !== req.body.UserId) {
+                return res.status(403).json({ error: 'Access denied: invalid address' })
+              }
+            }
+
             if (req.body.orderDetails && req.body.orderDetails.paymentId === 'wallet') {
               const wallet = await WalletModel.findOne({ where: { UserId: req.body.UserId } })
               if ((wallet != null) && wallet.balance >= totalPrice) {
