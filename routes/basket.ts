@@ -28,6 +28,12 @@ export function retrieveBasket () {
         }
       }
 
+      // [취약] 소유권 검증 없이 바로 응답 -> IDOR 취약점 (검증 로직 부재)
+      // [보안] JWT의 basket ID와 요청한 ID가 다르면 403 반환
+      const requestingUser = security.authenticatedUsers.from(req)
+      if (!requestingUser || requestingUser.bid !== parseInt(id, 10)) {
+        return res.status(403).json({ error: 'Access denied' })
+      }
       res.json(utils.queryResultToJson(basket))
     } catch (error) {
       next(error)
