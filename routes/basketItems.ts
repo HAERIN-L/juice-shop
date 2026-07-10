@@ -68,11 +68,26 @@ export function quantityCheckBeforeBasketItemUpdate () {
       const item = await BasketItemModel.findOne({ where: { id: req.params.id } })
       const user = security.authenticatedUsers.from(req)
       challengeUtils.solveIf(challenges.basketManipulateChallenge, () => { return user && req.body.BasketId && user.bid != req.body.BasketId }) // eslint-disable-line eqeqeq
-      if (req.body.quantity) {
+      // [취약] truthy 체크만 수행 — 음수 수량 통과됨
+      // if (req.body.quantity) {
+      //   if (item == null) {
+      //     throw new Error('No such item found!')
+      //   }
+      //   void quantityCheck(req, res, next, item.ProductId, req.body.quantity)
+      // } else {
+      //   next()
+      // }
+
+      // [보안] 정수 여부 및 최솟값 검증 후 400 반환
+      if (req.body.quantity !== undefined) {
+        const qty = Number(req.body.quantity)
+        if (!Number.isInteger(qty) || qty < 1) {
+          return res.status(400).json({ error: 'Quantity must be a positive integer' })
+        }
         if (item == null) {
           throw new Error('No such item found!')
         }
-        void quantityCheck(req, res, next, item.ProductId, req.body.quantity)
+        void quantityCheck(req, res, next, item.ProductId, qty)
       } else {
         next()
       }
