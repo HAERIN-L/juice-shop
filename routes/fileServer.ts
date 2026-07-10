@@ -24,13 +24,23 @@ export function servePublicFiles () {
   }
 
   function verify (file: string, res: Response, next: NextFunction) {
-    if (file && (endsWithAllowlistedFileType(file) || (file === 'incident-support.kdbx'))) {
-      file = security.cutOffPoisonNullByte(file)
+    // [취약] Null Byte 제거 후 재검증 없이 파일 전송 — 확장자 필터 우회 가능
+    // if (file && (endsWithAllowlistedFileType(file) || (file === 'incident-support.kdbx'))) {
+    //   file = security.cutOffPoisonNullByte(file)
+    //   res.sendFile(path.resolve('ftp/', file))
+    // }
 
-      challengeUtils.solveIf(challenges.directoryListingChallenge, () => { return file.toLowerCase() === 'acquisitions.md' })
-      verifySuccessfulPoisonNullByteExploit(file)
-
-      res.sendFile(path.resolve('ftp/', file))
+    // [보안] Null Byte 포함 시 즉시 차단, cutOff 후 재검증
+    if (file.includes('%00') || file.includes('\0')) {
+      res.status(400)
+      next(new Error('Invalid filename'))
+      return
+    }
+    const cleanFile = security.cutOffPoisonNullByte(file)
+    if (cleanFile && (endsWithAllowlistedFileType(cleanFile) || (cleanFile === 'incident-support.kdbx'))) {
+      challengeUtils.solveIf(challenges.directoryListingChallenge, () => { return cleanFile.toLowerCase() === 'acquisitions.md' })
+      verifySuccessfulPoisonNullByteExploit(cleanFile)
+      res.sendFile(path.resolve('ftp/', cleanFile))
     } else {
       res.status(403)
       next(new Error('Only .md and .pdf files are allowed!'))
