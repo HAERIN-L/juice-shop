@@ -35,6 +35,22 @@ export function placeOrder () {
     BasketModel.findOne({ where: { id }, include: [{ model: ProductModel, paranoid: false, as: 'Products' }] })
       .then(async (basket: BasketModel | null) => {
         if (basket != null) {
+          // [취약] 체크아웃 시 장바구니 상품 수량 및 금액 사전 검증 없음 — 빈 장바구니도 200 OK 반환
+
+          // [보안] 빈 장바구니 및 총액 0 이하 차단
+          // basket.Products는 L35에서 이미 include로 로드된 데이터 활용 (추가 쿼리 없음)
+          if (!basket.Products || basket.Products.length === 0) {
+            return res.status(400).json({ error: 'Basket is empty' })
+          }
+          const preTotal = basket.Products.reduce((sum, p) => {
+            const qty = p.BasketItem?.quantity ?? 0
+            const price = security.isDeluxe(req) ? p.deluxePrice : p.price
+            return sum + qty * price
+          }, 0)
+          if (preTotal <= 0) {
+            return res.status(400).json({ error: 'Invalid total amount' })
+          }
+
           const customer = security.authenticatedUsers.from(req)
           const email = customer ? customer.data ? customer.data.email : '' : ''
           const orderId = security.hash(email).slice(0, 4) + '-' + utils.randomHexString(16)
