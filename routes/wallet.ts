@@ -24,8 +24,17 @@ export function addWalletBalance () {
     const card = cardId ? await CardModel.findOne({ where: { id: cardId, UserId: req.body.UserId } }) : null
     if (card != null) {
       try {
-        await WalletModel.increment({ balance: req.body.balance }, { where: { UserId: req.body.UserId } })
-        res.status(200).json({ status: 'success', data: req.body.balance })
+        
+        // [취약] balance 최솟값 검증 없음 — 음수 그대로 increment에 전달됨
+        // await WalletModel.increment({ balance: req.body.balance }, { where: { UserId: req.body.UserId } })
+
+        // [보안] 양수 여부 검증 후 400 반환, 이후 amount 변수로 처리
+        const amount = Number(req.body.balance)
+        if (!Number.isFinite(amount) || amount <= 0) {
+          return res.status(400).json({ error: 'Balance must be a positive number' })
+        }
+        await WalletModel.increment({ balance: amount }, { where: { UserId: req.body.UserId } })
+        res.status(200).json({ status: 'success', data: amount })
       } catch {
         res.status(404).json({ status: 'error' })
       }
